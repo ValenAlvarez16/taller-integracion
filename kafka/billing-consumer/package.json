@@ -1,0 +1,12 @@
+{
+  "name": "billing-consumer",
+  "version": "1.0.0",
+  "description": "Consumidor de eventos OrderCreated: simula la generación de la factura o registro de cobro.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  }
+}

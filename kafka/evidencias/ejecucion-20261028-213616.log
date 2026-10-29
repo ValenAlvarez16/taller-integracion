@@ -1,0 +1,379 @@
+﻿**********************
+Inicio de la transcripción de Windows PowerShell
+Hora de inicio: 20261028213616
+Nombre de usuario: MIGUEL\migue
+Usuario RunAs: MIGUEL\migue
+Nombre de la configuración: 
+Máquina: MIGUEL (Microsoft Windows NT 10.0.26200.0)
+Aplicación host: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File .\scripts\ejecutar-pruebas.ps1
+Id. de proceso: 10508
+PSVersion: 5.1.26100.9711
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9711
+BuildVersion: 10.0.26100.9711
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Log completo se guarda en: .\evidencias\ejecucion-20261028-213616.log
+
+==========================================================================================
+0. MONTAJE DEL ENTORNO (estado actual)   [fecha de ejecucion: 28/10/2026 21:36:16]
+==========================================================================================
+
+> docker compose ps
+NAME                            IMAGE                           COMMAND                  SERVICE                 CREATED          STATUS                    PORTS
+kafka                           bitnamilegacy/kafka:3.7         "/opt/bitnami/script…"   kafka                   17 minutes ago   Up 17 minutes (healthy)   0.0.0.0:29092->29092/tcp, [::]:29092->29092/tcp
+kafka-billing-consumer-1        kafka-billing-consumer          "docker-entrypoint.s…"   billing-consumer        17 minutes ago   Up 16 minutes
+kafka-inventory-consumer-1      kafka-inventory-consumer        "docker-entrypoint.s…"   inventory-consumer      17 minutes ago   Up 16 minutes
+kafka-notification-consumer-1   kafka-notification-consumer     "docker-entrypoint.s…"   notification-consumer   17 minutes ago   Up 16 minutes
+kafka-ui                        provectuslabs/kafka-ui:latest   "/bin/sh -c 'java --…"   kafka-ui                17 minutes ago   Up 16 minutes             0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+orders-api                      kafka-orders-api                "docker-entrypoint.s…"   orders-api              17 minutes ago   Up 16 minutes             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+
+> docker compose exec -T kafka kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic orders.events
+Topic: orders.events	TopicId: _q0yX3fxQJ-WMu50RAtkpQ	PartitionCount: 2	ReplicationFactor: 1	Configs:
+	Topic: orders.events	Partition: 0	Leader: 1	Replicas: 1	Isr: 1
+	Topic: orders.events	Partition: 1	Leader: 1	Replicas: 1	Isr: 1
+
+> docker compose logs --no-color --tail 15 orders-api
+orders-api  | 2026-10-29T02:19:24.513Z [orders-api] Conectando a Kafka en kafka:9092 (intento 1)...
+orders-api  | 2026-10-29T02:19:24.545Z [orders-api] API escuchando en el puerto 3000 (POST /orders)
+orders-api  | 2026-10-29T02:19:24.699Z [orders-api] Tópico "orders.events" ya existía.
+orders-api  | 2026-10-29T02:19:24.735Z [orders-api] Conectado a Kafka. Productor listo para publicar en "orders.events".
+
+> docker compose logs --no-color --tail 6 inventory-consumer
+inventory-consumer-1  | 2026-10-29T02:19:23.537Z [inventory-consumer 7940421f9cb1] Conectando a Kafka en kafka:9092 (intento 1)...
+inventory-consumer-1  | 2026-10-29T02:19:23.638Z [inventory-consumer 7940421f9cb1] Kafka no disponible: This server does not host this topic-partition. Nuevo intento en 3 s.
+inventory-consumer-1  | 2026-10-29T02:19:26.644Z [inventory-consumer 7940421f9cb1] Conectando a Kafka en kafka:9092 (intento 2)...
+inventory-consumer-1  | 2026-10-29T02:19:26.657Z [inventory-consumer 7940421f9cb1] Suscrito al tópico "orders.events" con groupId="inventory-service-group" (procesamiento=3000 ms)
+inventory-consumer-1  | 2026-10-29T02:19:29.714Z [inventory-consumer 7940421f9cb1] Unido al grupo "inventory-service-group". Particiones asignadas: {"orders.events":[0,1]}
+Health de la API:
+
+> curl.exe -s http://localhost:3000/health
+{"status":"UP","kafka":"connected"}
+
+==========================================================================================
+CP-01  Creacion de pedido via API   [fecha de ejecucion: 28/10/2026 21:36:22]
+==========================================================================================
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":1,"customerName":"Pedro","product":"Libro de arquitectura"}
+HTTP 202  (816 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241382612-820","correlationId":"4ccf2ea1-25bb-4308-9931-da7f59a12ed1"}
+PS>ErrorTerminación(Invoke-WebRequest): "{"status":"rejected","errors":["quantity debe ser un entero mayor que 0"]}"
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":0,"customerName":"Pedro","product":"Libro de arquitectura"}
+HTTP 400  (96 ms medidos por el cliente)
+Respuesta    : {"status":"rejected","errors":["quantity debe ser un entero mayor que 0"]}
+
+> docker compose logs --no-color --tail 6 orders-api
+orders-api  | 2026-10-29T02:19:24.513Z [orders-api] Conectando a Kafka en kafka:9092 (intento 1)...
+orders-api  | 2026-10-29T02:19:24.545Z [orders-api] API escuchando en el puerto 3000 (POST /orders)
+orders-api  | 2026-10-29T02:19:24.699Z [orders-api] Tópico "orders.events" ya existía.
+orders-api  | 2026-10-29T02:19:24.735Z [orders-api] Conectado a Kafka. Productor listo para publicar en "orders.events".
+orders-api  | 2026-10-29T02:36:23.061Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=1 offset=0 eventId=92c6170a-ac21-4b7b-a99e-90ed09b5d0b9 orderId=ORD-1793241382612-820 correlationId=4ccf2ea1-25bb-4308-9931-da7f59a12ed1 tiempoRespuestaMs=449.06
+orders-api  | 2026-10-29T02:36:23.191Z [orders-api] Pedido rechazado (400): quantity debe ser un entero mayor que 0
+
+==========================================================================================
+CP-04  Publicacion de evento en Kafka   [fecha de ejecucion: 28/10/2026 21:36:26]
+==========================================================================================
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":2,"customerName":"Pedro CP04","product":"Libro de arquitectura"}
+HTTP 202  (55 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241389967-854","correlationId":"eb74e226-99ce-47ae-95f8-3fb3e9fa95e5"}
+
+> docker compose logs --no-color --tail 3 orders-api
+orders-api  | 2026-10-29T02:36:23.061Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=1 offset=0 eventId=92c6170a-ac21-4b7b-a99e-90ed09b5d0b9 orderId=ORD-1793241382612-820 correlationId=4ccf2ea1-25bb-4308-9931-da7f59a12ed1 tiempoRespuestaMs=449.06
+orders-api  | 2026-10-29T02:36:23.191Z [orders-api] Pedido rechazado (400): quantity debe ser un entero mayor que 0
+orders-api  | 2026-10-29T02:36:29.978Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=1 offset=1 eventId=693fce66-6113-4570-9922-1438da6a429d orderId=ORD-1793241389967-854 correlationId=eb74e226-99ce-47ae-95f8-3fb3e9fa95e5 tiempoRespuestaMs=10.61
+
+Offsets del topico ANTES : particion 0 -> offset final 0   |   particion 1 -> offset final 1
+Offsets del topico DESPUES: particion 0 -> offset final 0   |   particion 1 -> offset final 2
+El evento nuevo quedo en particion=1 offset=1. Contenido leido directamente del broker:
+
+> docker compose exec -T kafka kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic orders.events --partition 1 --offset 1 --max-messages 1 --timeout-ms 10000 --property print.partition=true --property print.offset=true --property print.key=true --property print.headers=true
+Partition:1	Offset:1	correlationId:eb74e226-99ce-47ae-95f8-3fb3e9fa95e5,eventType:OrderCreated	ORD-1793241389967-854	{"eventId":"693fce66-6113-4570-9922-1438da6a429d","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:36:29.968Z","source":"orders-api","correlationId":"eb74e226-99ce-47ae-95f8-3fb3e9fa95e5","data":{"orderId":"ORD-1793241389967-854","customerName":"Pedro CP04","product":"Libro de arquitectura","quantity":2,"unitPrice":85000,"total":170000}}
+Processed a total of 1 messages
+
+==========================================================================================
+CP-05  Consumo de evento (Kafka) por los 3 consumers   [fecha de ejecucion: 28/10/2026 21:36:38]
+==========================================================================================
+Esperando 15 s a que los 3 consumers terminen de procesar (cada evento tarda ~3 s)...
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":1,"customerName":"Pedro CP05","product":"Libro de arquitectura"}
+HTTP 202  (57 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241413783-916","correlationId":"bf3a8fc7-a41b-489e-8e8f-fa666c321455"}
+
+> docker compose logs --no-color --tail 8 inventory-consumer
+inventory-consumer-1  | 2026-10-29T02:36:29.982Z [inventory-consumer 7940421f9cb1] Evento recibido eventType=OrderCreated eventId=693fce66-6113-4570-9922-1438da6a429d orderId=ORD-1793241389967-854 correlationId=eb74e226-99ce-47ae-95f8-3fb3e9fa95e5 topic=orders.events partition=1 offset=1
+inventory-consumer-1  | 2026-10-29T02:36:29.983Z [inventory-consumer 7940421f9cb1] Contenido: {"eventId":"693fce66-6113-4570-9922-1438da6a429d","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:36:29.968Z","source":"orders-api","correlationId":"eb74e226-99ce-47ae-95f8-3fb3e9fa95e5","data":{"orderId":"ORD-1793241389967-854","customerName":"Pedro CP04","product":"Libro de arquitectura","quantity":2,"unitPrice":85000,"total":170000}}
+inventory-consumer-1  | 2026-10-29T02:36:29.984Z [inventory-consumer 7940421f9cb1] Simulando reserva de inventario: 2 x "Libro de arquitectura" (orderId=ORD-1793241389967-854)...
+inventory-consumer-1  | 2026-10-29T02:36:32.984Z [inventory-consumer 7940421f9cb1] Evento procesado orderId=ORD-1793241389967-854 correlationId=eb74e226-99ce-47ae-95f8-3fb3e9fa95e5 partition=1 offset=1 totalProcesados=2
+inventory-consumer-1  | 2026-10-29T02:36:53.796Z [inventory-consumer 7940421f9cb1] Evento recibido eventType=OrderCreated eventId=d3db54e9-9fc0-48a4-a18b-9286dafd1738 orderId=ORD-1793241413783-916 correlationId=bf3a8fc7-a41b-489e-8e8f-fa666c321455 topic=orders.events partition=1 offset=2
+inventory-consumer-1  | 2026-10-29T02:36:53.796Z [inventory-consumer 7940421f9cb1] Contenido: {"eventId":"d3db54e9-9fc0-48a4-a18b-9286dafd1738","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:36:53.783Z","source":"orders-api","correlationId":"bf3a8fc7-a41b-489e-8e8f-fa666c321455","data":{"orderId":"ORD-1793241413783-916","customerName":"Pedro CP05","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+inventory-consumer-1  | 2026-10-29T02:36:53.796Z [inventory-consumer 7940421f9cb1] Simulando reserva de inventario: 1 x "Libro de arquitectura" (orderId=ORD-1793241413783-916)...
+inventory-consumer-1  | 2026-10-29T02:36:56.797Z [inventory-consumer 7940421f9cb1] Evento procesado orderId=ORD-1793241413783-916 correlationId=bf3a8fc7-a41b-489e-8e8f-fa666c321455 partition=1 offset=2 totalProcesados=3
+
+> docker compose logs --no-color --tail 8 billing-consumer
+billing-consumer-1  | 2026-10-29T02:36:29.993Z [billing-consumer 43c460d58271] Evento recibido eventType=OrderCreated eventId=693fce66-6113-4570-9922-1438da6a429d orderId=ORD-1793241389967-854 correlationId=eb74e226-99ce-47ae-95f8-3fb3e9fa95e5 topic=orders.events partition=1 offset=1
+billing-consumer-1  | 2026-10-29T02:36:29.993Z [billing-consumer 43c460d58271] Contenido: {"eventId":"693fce66-6113-4570-9922-1438da6a429d","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:36:29.968Z","source":"orders-api","correlationId":"eb74e226-99ce-47ae-95f8-3fb3e9fa95e5","data":{"orderId":"ORD-1793241389967-854","customerName":"Pedro CP04","product":"Libro de arquitectura","quantity":2,"unitPrice":85000,"total":170000}}
+billing-consumer-1  | 2026-10-29T02:36:29.994Z [billing-consumer 43c460d58271] Simulando generación de factura para Pedro CP04 por total=170000 (orderId=ORD-1793241389967-854)...
+billing-consumer-1  | 2026-10-29T02:36:32.996Z [billing-consumer 43c460d58271] Evento procesado orderId=ORD-1793241389967-854 correlationId=eb74e226-99ce-47ae-95f8-3fb3e9fa95e5 partition=1 offset=1 totalProcesados=2
+billing-consumer-1  | 2026-10-29T02:36:53.798Z [billing-consumer 43c460d58271] Evento recibido eventType=OrderCreated eventId=d3db54e9-9fc0-48a4-a18b-9286dafd1738 orderId=ORD-1793241413783-916 correlationId=bf3a8fc7-a41b-489e-8e8f-fa666c321455 topic=orders.events partition=1 offset=2
+billing-consumer-1  | 2026-10-29T02:36:53.798Z [billing-consumer 43c460d58271] Contenido: {"eventId":"d3db54e9-9fc0-48a4-a18b-9286dafd1738","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:36:53.783Z","source":"orders-api","correlationId":"bf3a8fc7-a41b-489e-8e8f-fa666c321455","data":{"orderId":"ORD-1793241413783-916","customerName":"Pedro CP05","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+billing-consumer-1  | 2026-10-29T02:36:53.798Z [billing-consumer 43c460d58271] Simulando generación de factura para Pedro CP05 por total=85000 (orderId=ORD-1793241413783-916)...
+billing-consumer-1  | 2026-10-29T02:36:56.799Z [billing-consumer 43c460d58271] Evento procesado orderId=ORD-1793241413783-916 correlationId=bf3a8fc7-a41b-489e-8e8f-fa666c321455 partition=1 offset=2 totalProcesados=3
+
+> docker compose logs --no-color --tail 8 notification-consumer
+notification-consumer-1  | 2026-10-29T02:36:29.982Z [notification-consumer 74a7be60f210] Evento recibido eventType=OrderCreated eventId=693fce66-6113-4570-9922-1438da6a429d orderId=ORD-1793241389967-854 correlationId=eb74e226-99ce-47ae-95f8-3fb3e9fa95e5 topic=orders.events partition=1 offset=1
+notification-consumer-1  | 2026-10-29T02:36:29.982Z [notification-consumer 74a7be60f210] Contenido: {"eventId":"693fce66-6113-4570-9922-1438da6a429d","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:36:29.968Z","source":"orders-api","correlationId":"eb74e226-99ce-47ae-95f8-3fb3e9fa95e5","data":{"orderId":"ORD-1793241389967-854","customerName":"Pedro CP04","product":"Libro de arquitectura","quantity":2,"unitPrice":85000,"total":170000}}
+notification-consumer-1  | 2026-10-29T02:36:29.982Z [notification-consumer 74a7be60f210] Simulando envío de notificación a Pedro CP04 por "Libro de arquitectura" x2 (orderId=ORD-1793241389967-854)...
+notification-consumer-1  | 2026-10-29T02:36:32.983Z [notification-consumer 74a7be60f210] Evento procesado orderId=ORD-1793241389967-854 correlationId=eb74e226-99ce-47ae-95f8-3fb3e9fa95e5 partition=1 offset=1 totalProcesados=2
+notification-consumer-1  | 2026-10-29T02:36:53.794Z [notification-consumer 74a7be60f210] Evento recibido eventType=OrderCreated eventId=d3db54e9-9fc0-48a4-a18b-9286dafd1738 orderId=ORD-1793241413783-916 correlationId=bf3a8fc7-a41b-489e-8e8f-fa666c321455 topic=orders.events partition=1 offset=2
+notification-consumer-1  | 2026-10-29T02:36:53.794Z [notification-consumer 74a7be60f210] Contenido: {"eventId":"d3db54e9-9fc0-48a4-a18b-9286dafd1738","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:36:53.783Z","source":"orders-api","correlationId":"bf3a8fc7-a41b-489e-8e8f-fa666c321455","data":{"orderId":"ORD-1793241413783-916","customerName":"Pedro CP05","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+notification-consumer-1  | 2026-10-29T02:36:53.795Z [notification-consumer 74a7be60f210] Simulando envío de notificación a Pedro CP05 por "Libro de arquitectura" x1 (orderId=ORD-1793241413783-916)...
+notification-consumer-1  | 2026-10-29T02:36:56.798Z [notification-consumer 74a7be60f210] Evento procesado orderId=ORD-1793241413783-916 correlationId=bf3a8fc7-a41b-489e-8e8f-fa666c321455 partition=1 offset=2 totalProcesados=3
+
+> docker compose exec -T kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --all-groups
+
+GROUP                 TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                           HOST            CLIENT-ID
+billing-service-group orders.events   0          -               0               -               billing-consumer-b3e8c74f-9a79-447a-9a2d-427cf53f77b9 /172.18.0.4     billing-consumer
+billing-service-group orders.events   1          3               3               0               billing-consumer-b3e8c74f-9a79-447a-9a2d-427cf53f77b9 /172.18.0.4     billing-consumer
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          -               0               -               inventory-consumer-c394104f-309a-4100-92f2-c1f5d18536e5 /172.18.0.3     inventory-consumer
+inventory-service-group orders.events   1          3               3               0               inventory-consumer-c394104f-309a-4100-92f2-c1f5d18536e5 /172.18.0.3     inventory-consumer
+
+GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                HOST            CLIENT-ID
+notification-service-group orders.events   0          -               0               -               notification-consumer-ee17e449-420f-4f51-b095-a427a89dd31e /172.18.0.7     notification-consumer
+notification-service-group orders.events   1          3               3               0               notification-consumer-ee17e449-420f-4f51-b095-a427a89dd31e /172.18.0.7     notification-consumer
+
+==========================================================================================
+CP-06  Trazabilidad del flujo (mismo orderId / correlationId)   [fecha de ejecucion: 28/10/2026 21:37:05]
+==========================================================================================
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":1,"customerName":"Traza","product":"Libro de arquitectura"}
+HTTP 202  (22 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241425635-747","correlationId":"e00fce5e-5590-4a4d-a766-06a3a90e18ed"}
+orderId=ORD-1793241425635-747   correlationId=e00fce5e-5590-4a4d-a766-06a3a90e18ed
+
+> docker compose logs (orders-api + 3 consumers) filtrado por ORD-1793241425635-747
+billing-consumer-1       | 2026-10-29T02:37:05.654Z [billing-consumer 43c460d58271] Evento recibido eventType=OrderCreated eventId=6cd3e306-257f-400b-a8b7-a495b07acdeb orderId=ORD-1793241425635-747 correlationId=e00fce5e-5590-4a4d-a766-06a3a90e18ed topic=orders.events partition=0 offset=0
+billing-consumer-1       | 2026-10-29T02:37:05.654Z [billing-consumer 43c460d58271] Contenido: {"eventId":"6cd3e306-257f-400b-a8b7-a495b07acdeb","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:37:05.635Z","source":"orders-api","correlationId":"e00fce5e-5590-4a4d-a766-06a3a90e18ed","data":{"orderId":"ORD-1793241425635-747","customerName":"Traza","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+orders-api               | 2026-10-29T02:37:05.640Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=0 offset=0 eventId=6cd3e306-257f-400b-a8b7-a495b07acdeb orderId=ORD-1793241425635-747 correlationId=e00fce5e-5590-4a4d-a766-06a3a90e18ed tiempoRespuestaMs=4.77
+billing-consumer-1       | 2026-10-29T02:37:05.655Z [billing-consumer 43c460d58271] Simulando generación de factura para Traza por total=85000 (orderId=ORD-1793241425635-747)...
+billing-consumer-1       | 2026-10-29T02:37:08.655Z [billing-consumer 43c460d58271] Evento procesado orderId=ORD-1793241425635-747 correlationId=e00fce5e-5590-4a4d-a766-06a3a90e18ed partition=0 offset=0 totalProcesados=4
+notification-consumer-1  | 2026-10-29T02:37:05.656Z [notification-consumer 74a7be60f210] Evento recibido eventType=OrderCreated eventId=6cd3e306-257f-400b-a8b7-a495b07acdeb orderId=ORD-1793241425635-747 correlationId=e00fce5e-5590-4a4d-a766-06a3a90e18ed topic=orders.events partition=0 offset=0
+notification-consumer-1  | 2026-10-29T02:37:05.656Z [notification-consumer 74a7be60f210] Contenido: {"eventId":"6cd3e306-257f-400b-a8b7-a495b07acdeb","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:37:05.635Z","source":"orders-api","correlationId":"e00fce5e-5590-4a4d-a766-06a3a90e18ed","data":{"orderId":"ORD-1793241425635-747","customerName":"Traza","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+notification-consumer-1  | 2026-10-29T02:37:05.656Z [notification-consumer 74a7be60f210] Simulando envío de notificación a Traza por "Libro de arquitectura" x1 (orderId=ORD-1793241425635-747)...
+notification-consumer-1  | 2026-10-29T02:37:08.656Z [notification-consumer 74a7be60f210] Evento procesado orderId=ORD-1793241425635-747 correlationId=e00fce5e-5590-4a4d-a766-06a3a90e18ed partition=0 offset=0 totalProcesados=4
+inventory-consumer-1     | 2026-10-29T02:37:05.654Z [inventory-consumer 7940421f9cb1] Evento recibido eventType=OrderCreated eventId=6cd3e306-257f-400b-a8b7-a495b07acdeb orderId=ORD-1793241425635-747 correlationId=e00fce5e-5590-4a4d-a766-06a3a90e18ed topic=orders.events partition=0 offset=0
+inventory-consumer-1     | 2026-10-29T02:37:05.654Z [inventory-consumer 7940421f9cb1] Contenido: {"eventId":"6cd3e306-257f-400b-a8b7-a495b07acdeb","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:37:05.635Z","source":"orders-api","correlationId":"e00fce5e-5590-4a4d-a766-06a3a90e18ed","data":{"orderId":"ORD-1793241425635-747","customerName":"Traza","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+inventory-consumer-1     | 2026-10-29T02:37:05.654Z [inventory-consumer 7940421f9cb1] Simulando reserva de inventario: 1 x "Libro de arquitectura" (orderId=ORD-1793241425635-747)...
+inventory-consumer-1     | 2026-10-29T02:37:08.655Z [inventory-consumer 7940421f9cb1] Evento procesado orderId=ORD-1793241425635-747 correlationId=e00fce5e-5590-4a4d-a766-06a3a90e18ed partition=0 offset=0 totalProcesados=4
+
+Lineas que contienen el correlationId e00fce5e-5590-4a4d-a766-06a3a90e18ed :
+10 lineas (API + inventory + billing + notification)
+
+Buscando el evento de ORD-1793241425635-747 en la particion 0 del topico (lectura directa del broker):
+Partition:0	Offset:0	correlationId:e00fce5e-5590-4a4d-a766-06a3a90e18ed,eventType:OrderCreated	ORD-1793241425635-747	{"eventId":"6cd3e306-257f-400b-a8b7-a495b07acdeb","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T02:37:05.635Z","source":"orders-api","correlationId":"e00fce5e-5590-4a4d-a766-06a3a90e18ed","data":{"orderId":"ORD-1793241425635-747","customerName":"Traza","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+
+Buscando el evento de ORD-1793241425635-747 en la particion 1 del topico (lectura directa del broker):
+(no esta en la particion 1)
+
+==========================================================================================
+CP-07  Responsive (la API responde sin esperar a los consumers)   [fecha de ejecucion: 28/10/2026 21:37:34]
+==========================================================================================
+Esperando 8 s a que se vacie el trabajo pendiente...
+--- 7.1  5 pedidos seguidos con los consumers activos (cada uno tarda ~3 s en procesar) ---
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":1,"customerName":"Cliente 1","product":"Libro de arquitectura"}
+HTTP 202  (54 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241462687-195","correlationId":"4123dc3a-0f2f-49c0-8c67-0bc6801c429d"}
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":1,"customerName":"Cliente 2","product":"Libro de arquitectura"}
+HTTP 202  (17 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241462732-186","correlationId":"75c39976-3347-4873-9ef4-cc8bd0722525"}
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":1,"customerName":"Cliente 3","product":"Libro de arquitectura"}
+HTTP 202  (16 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241462755-608","correlationId":"2c4b5cc2-a066-45b6-a9cb-79407d789677"}
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":1,"customerName":"Cliente 4","product":"Libro de arquitectura"}
+HTTP 202  (17 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241462775-434","correlationId":"57c68e23-70da-4ec4-804d-18e5c49882c3"}
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":1,"customerName":"Cliente 5","product":"Libro de arquitectura"}
+HTTP 202  (17 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241462797-518","correlationId":"2d16af2a-1129-4429-9fdd-734cf66981d8"}
+Los 5 pedidos fueron aceptados en 153 ms en total.
+
+> docker compose exec -T kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --all-groups
+
+GROUP                 TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                           HOST            CLIENT-ID
+billing-service-group orders.events   0          1               4               3               billing-consumer-b3e8c74f-9a79-447a-9a2d-427cf53f77b9 /172.18.0.4     billing-consumer
+billing-service-group orders.events   1          3               5               2               billing-consumer-b3e8c74f-9a79-447a-9a2d-427cf53f77b9 /172.18.0.4     billing-consumer
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          1               4               3               inventory-consumer-c394104f-309a-4100-92f2-c1f5d18536e5 /172.18.0.3     inventory-consumer
+inventory-service-group orders.events   1          3               5               2               inventory-consumer-c394104f-309a-4100-92f2-c1f5d18536e5 /172.18.0.3     inventory-consumer
+
+GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                HOST            CLIENT-ID
+notification-service-group orders.events   0          1               4               3               notification-consumer-ee17e449-420f-4f51-b095-a427a89dd31e /172.18.0.7     notification-consumer
+notification-service-group orders.events   1          3               5               2               notification-consumer-ee17e449-420f-4f51-b095-a427a89dd31e /172.18.0.7     notification-consumer
+--- 7.2  Con los 3 consumers APAGADOS ---
+
+> docker compose stop inventory-consumer billing-consumer notification-consumer
+ Container kafka-notification-consumer-1 Stopping
+ Container kafka-billing-consumer-1 Stopping
+ Container kafka-inventory-consumer-1 Stopping
+ Container kafka-billing-consumer-1 Stopped
+ Container kafka-notification-consumer-1 Stopped
+ Container kafka-inventory-consumer-1 Stopped
+
+POST http://localhost:3000/orders
+Body enviado : {"unitPrice":85000,"quantity":1,"customerName":"Consumers apagados","product":"Libro de arquitectura"}
+HTTP 202  (19 ms medidos por el cliente)
+Respuesta    : {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793241465994-879","correlationId":"62a912ad-f166-4b00-bf98-64f034ee02fb"}
+
+> docker compose logs --no-color --tail 8 orders-api
+orders-api  | 2026-10-29T02:36:53.791Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=1 offset=2 eventId=d3db54e9-9fc0-48a4-a18b-9286dafd1738 orderId=ORD-1793241413783-916 correlationId=bf3a8fc7-a41b-489e-8e8f-fa666c321455 tiempoRespuestaMs=7.88
+orders-api  | 2026-10-29T02:37:05.640Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=0 offset=0 eventId=6cd3e306-257f-400b-a8b7-a495b07acdeb orderId=ORD-1793241425635-747 correlationId=e00fce5e-5590-4a4d-a766-06a3a90e18ed tiempoRespuestaMs=4.77
+orders-api  | 2026-10-29T02:37:42.695Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=0 offset=1 eventId=95c579fd-3514-4058-aa9e-29eda3bc26f1 orderId=ORD-1793241462687-195 correlationId=4123dc3a-0f2f-49c0-8c67-0bc6801c429d tiempoRespuestaMs=10.68
+orders-api  | 2026-10-29T02:37:42.735Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=1 offset=3 eventId=86590f25-6b49-4c37-9d59-b0a460a682a1 orderId=ORD-1793241462732-186 correlationId=75c39976-3347-4873-9ef4-cc8bd0722525 tiempoRespuestaMs=3.06
+orders-api  | 2026-10-29T02:37:42.757Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=0 offset=2 eventId=2b2ea60b-ba70-41eb-a449-2a614030c15f orderId=ORD-1793241462755-608 correlationId=2c4b5cc2-a066-45b6-a9cb-79407d789677 tiempoRespuestaMs=2.77
+orders-api  | 2026-10-29T02:37:42.778Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=0 offset=3 eventId=8d705f7f-78d0-42f4-a06c-492a6800b824 orderId=ORD-1793241462775-434 correlationId=57c68e23-70da-4ec4-804d-18e5c49882c3 tiempoRespuestaMs=3.48
+orders-api  | 2026-10-29T02:37:42.800Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=1 offset=4 eventId=f9046f54-1dc6-4cd3-963d-e9d7a97e470b orderId=ORD-1793241462797-518 correlationId=2d16af2a-1129-4429-9fdd-734cf66981d8 tiempoRespuestaMs=3.33
+orders-api  | 2026-10-29T02:37:45.998Z [orders-api] Evento OrderCreated publicado topic=orders.events partition=0 offset=4 eventId=74971ade-bdf6-4144-81ad-956eb570ca69 orderId=ORD-1793241465994-879 correlationId=62a912ad-f166-4b00-bf98-64f034ee02fb tiempoRespuestaMs=4.02
+
+> docker compose exec -T kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --all-groups
+
+Consumer group 'billing-service-group' has no active members.
+
+GROUP                 TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+billing-service-group orders.events   0          1               5               4               -               -               -
+billing-service-group orders.events   1          3               5               2               -               -               -
+
+Consumer group 'inventory-service-group' has no active members.
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+inventory-service-group orders.events   0          1               5               4               -               -               -
+inventory-service-group orders.events   1          3               5               2               -               -               -
+
+Consumer group 'notification-service-group' has no active members.
+
+GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+notification-service-group orders.events   0          1               5               4               -               -               -
+notification-service-group orders.events   1          3               5               2               -               -               -
+--- 7.3  Se vuelven a encender los consumers (dejan el entorno limpio y procesan lo pendiente) ---
+
+> docker compose start inventory-consumer billing-consumer notification-consumer
+ Container kafka Waiting
+ Container kafka Waiting
+ Container kafka Waiting
+ Container kafka Healthy
+ Container kafka-inventory-consumer-1 Starting
+ Container kafka Healthy
+ Container kafka-notification-consumer-1 Starting
+ Container kafka Healthy
+ Container kafka-billing-consumer-1 Starting
+ Container kafka-inventory-consumer-1 Started
+ Container kafka-notification-consumer-1 Started
+ Container kafka-billing-consumer-1 Started
+Esperando 45 s a que los consumers se unan al grupo y procesen lo pendiente...
+
+> docker compose exec -T kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --all-groups
+
+GROUP                 TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                           HOST            CLIENT-ID
+billing-service-group orders.events   0          5               5               0               billing-consumer-3bf59653-e95a-4c8a-9cbf-a610ed2cd0d3 /172.18.0.7     billing-consumer
+billing-service-group orders.events   1          5               5               0               billing-consumer-3bf59653-e95a-4c8a-9cbf-a610ed2cd0d3 /172.18.0.7     billing-consumer
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          5               5               0               inventory-consumer-14e12c07-81fb-406a-9e1a-adfae008401e /172.18.0.3     inventory-consumer
+inventory-service-group orders.events   1          5               5               0               inventory-consumer-14e12c07-81fb-406a-9e1a-adfae008401e /172.18.0.3     inventory-consumer
+
+GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                HOST            CLIENT-ID
+notification-service-group orders.events   0          5               5               0               notification-consumer-6a6616de-da60-4cc6-bece-ead0fbd38679 /172.18.0.4     notification-consumer
+notification-service-group orders.events   1          5               5               0               notification-consumer-6a6616de-da60-4cc6-bece-ead0fbd38679 /172.18.0.4     notification-consumer
+
+==========================================================================================
+CP-08  Message-driven (sin comunicacion directa entre servicios)   [fecha de ejecucion: 28/10/2026 21:38:40]
+==========================================================================================
+
+> docker compose ps
+NAME                            IMAGE                           COMMAND                  SERVICE                 CREATED          STATUS                    PORTS
+kafka                           bitnamilegacy/kafka:3.7         "/opt/bitnami/script…"   kafka                   19 minutes ago   Up 19 minutes (healthy)   0.0.0.0:29092->29092/tcp, [::]:29092->29092/tcp
+kafka-billing-consumer-1        kafka-billing-consumer          "docker-entrypoint.s…"   billing-consumer        19 minutes ago   Up 47 seconds
+kafka-inventory-consumer-1      kafka-inventory-consumer        "docker-entrypoint.s…"   inventory-consumer      19 minutes ago   Up 48 seconds
+kafka-notification-consumer-1   kafka-notification-consumer     "docker-entrypoint.s…"   notification-consumer   19 minutes ago   Up 48 seconds
+kafka-ui                        provectuslabs/kafka-ui:latest   "/bin/sh -c 'java --…"   kafka-ui                19 minutes ago   Up 19 minutes             0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+orders-api                      kafka-orders-api                "docker-entrypoint.s…"   orders-api              19 minutes ago   Up 19 minutes             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+
+> Puertos publicados en docker compose config (solo kafka, kafka-ui y orders-api deben tener 'ports')
+  billing-consumer:
+  inventory-consumer:
+  kafka:
+    container_name: kafka
+    ports:
+        target: 29092
+        published: "29092"
+        target: /bitnami/kafka
+  kafka-ui:
+    container_name: kafka-ui
+    ports:
+        target: 8080
+        published: "8080"
+  notification-consumer:
+  orders-api:
+    container_name: orders-api
+    ports:
+        target: 3000
+        published: "3000"
+  default:
+
+> Codigo fuente: donde aparece HTTP (express / listen / http / axios / fetch)
+.\billing-consumer\src\index.js : sin ninguna referencia HTTP
+.\inventory-consumer\src\index.js : sin ninguna referencia HTTP
+.\notification-consumer\src\index.js : sin ninguna referencia HTTP
+.\orders-api\src\index.js:6: const express = require('express');
+.\orders-api\src\index.js:158: app.listen(PORT, () => log(`API escuchando en el puerto ${PORT} (POST /orders)`));
+
+> Intento de llamada directa de orders-api a cada consumer por HTTP (debe fallar)
+
+> docker compose exec -T orders-api wget -qO- -T 3 http://inventory-consumer:3000
+wget: can't connect to remote host (172.18.0.3): Connection refused
+
+> docker compose exec -T orders-api wget -qO- -T 3 http://billing-consumer:3000
+wget: can't connect to remote host (172.18.0.7): Connection refused
+
+> docker compose exec -T orders-api wget -qO- -T 3 http://notification-consumer:3000
+wget: can't connect to remote host (172.18.0.4): Connection refused
+
+==========================================================================================
+FIN - estado final   [fecha de ejecucion: 28/10/2026 21:38:42]
+==========================================================================================
+
+> docker compose ps
+NAME                            IMAGE                           COMMAND                  SERVICE                 CREATED          STATUS                    PORTS
+kafka                           bitnamilegacy/kafka:3.7         "/opt/bitnami/script…"   kafka                   19 minutes ago   Up 19 minutes (healthy)   0.0.0.0:29092->29092/tcp, [::]:29092->29092/tcp
+kafka-billing-consumer-1        kafka-billing-consumer          "docker-entrypoint.s…"   billing-consumer        19 minutes ago   Up 49 seconds
+kafka-inventory-consumer-1      kafka-inventory-consumer        "docker-entrypoint.s…"   inventory-consumer      19 minutes ago   Up 50 seconds
+kafka-notification-consumer-1   kafka-notification-consumer     "docker-entrypoint.s…"   notification-consumer   19 minutes ago   Up 50 seconds
+kafka-ui                        provectuslabs/kafka-ui:latest   "/bin/sh -c 'java --…"   kafka-ui                19 minutes ago   Up 19 minutes             0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+orders-api                      kafka-orders-api                "docker-entrypoint.s…"   orders-api              19 minutes ago   Up 19 minutes             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+
+Log completo guardado en: .\evidencias\ejecucion-20261028-213616.log
+**********************
+Fin de la transcripción de Windows PowerShell
+Hora de finalización: 20261028213843
+**********************
