@@ -1,0 +1,38 @@
+##########################################################################
+# CP-11 DESACOPLAMIENTO TEMPORAL (Kafka) - Fecha: 29/10/2026 20:45:49
+##########################################################################
+=== PASO 1: APAGAR inventory-consumer ===
+ Container kafka-inventory-consumer-1 Stopping 
+ Container kafka-inventory-consumer-1 Stopped 
+=== PASO 2: offset final ANTES de publicar ===
+orders.events:0:5
+orders.events:1:6
+=== PASO 3: publicar 3 eventos. HORA DE PUBLICACION: 20:45:52 ===
+Pedido 1 -> {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793324752437-993","correlationId":"7915eb67-7019-42c0-8b48-24f8e6856e7f"}
+Pedido 2 -> {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793324752461-608","correlationId":"8e18fa10-b67d-4377-bf09-99eced57301b"}
+Pedido 3 -> {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793324752481-864","correlationId":"3ed46943-22c7-4dab-bc37-815dbbb3b1c2"}
+=== PASO 4: offset final DESPUES de publicar (el log crecio; eventos persistidos) ===
+orders.events:0:7
+orders.events:1:7
+--- inventory-service-group acumula LAG (consumidor apagado) ---
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          5               7               2               inventory-consumer-d7ff3889-e9b7-4a26-8a49-d6b490875d50 /172.21.0.7     inventory-consumer
+inventory-service-group orders.events   1          6               7               1               inventory-consumer-d7ff3889-e9b7-4a26-8a49-d6b490875d50 /172.21.0.7     inventory-consumer
+=== PASO 5: ESPERA DELIBERADA de 12s con el consumidor apagado ===
+=== PASO 6: INICIAR inventory-consumer. HORA DE INICIO: 20:46:11 ===
+ Container kafka Waiting 
+ Container kafka Healthy 
+ Container kafka-inventory-consumer-1 Starting 
+ Container kafka-inventory-consumer-1 Started 
+=== PASO 7: lag final (LAG 0) y procesamiento diferido (occurredAt vs timestamp log) ===
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          7               7               0               inventory-consumer-6f599bd0-88b0-411c-b4fc-026d32e18e9e /172.21.0.7     inventory-consumer
+inventory-service-group orders.events   1          7               7               0               inventory-consumer-6f599bd0-88b0-411c-b4fc-026d32e18e9e /172.21.0.7     inventory-consumer
+inventory-consumer-1  | 2026-10-30T01:46:15.204Z [inventory-consumer 90f27676a633] Contenido: {"eventId":"d27c6460-7d13-4062-acc9-c50456ed46c2","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-30T01:45:52.438Z","source":"orders-api","correlationId":"7915eb67-7019-42c0-8b48-24f8e6856e7f","data":{"orderId":"ORD-1793324752437-993","customerName":"CP11K Cliente 1","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+inventory-consumer-1  | 2026-10-30T01:46:18.212Z [inventory-consumer 90f27676a633] Contenido: {"eventId":"504cdd94-5d1f-4738-b770-2281ba88d23c","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-30T01:45:52.481Z","source":"orders-api","correlationId":"3ed46943-22c7-4dab-bc37-815dbbb3b1c2","data":{"orderId":"ORD-1793324752481-864","customerName":"CP11K Cliente 3","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+inventory-consumer-1  | 2026-10-30T01:46:21.230Z [inventory-consumer 90f27676a633] Contenido: {"eventId":"1d15e89d-e862-4458-897c-a04ae3fa26c2","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-30T01:45:52.461Z","source":"orders-api","correlationId":"8e18fa10-b67d-4377-bf09-99eced57301b","data":{"orderId":"ORD-1793324752461-608","customerName":"CP11K Cliente 2","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+--- total CP11K procesados (debe ser 3) ---
+3
+=== FIN CP-11 Kafka.  Log: evidencias/cp11-desacople-kafka-20261029-204549.log ===

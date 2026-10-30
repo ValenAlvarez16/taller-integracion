@@ -1,0 +1,55 @@
+##########################################################################
+# CP-09 RESILIENT (Kafka) - Fecha: 29/10/2026 16:19:10
+##########################################################################
+=== PASO 0: lag inicial de inventory-service-group ===
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          -               0               -               inventory-consumer-77d25dc7-a3c3-4f69-aefd-18cc6364447b /172.21.0.7     inventory-consumer
+inventory-service-group orders.events   1          -               0               -               inventory-consumer-77d25dc7-a3c3-4f69-aefd-18cc6364447b /172.21.0.7     inventory-consumer
+=== PASO 1: APAGAR inventory-consumer (simular caida de UN consumidor) ===
+ Container kafka-inventory-consumer-1 Stopping 
+ Container kafka-inventory-consumer-1 Stopped 
+NAME                            STATUS
+kafka                           Up About a minute (healthy)
+kafka-billing-consumer-1        Up 57 seconds
+kafka-notification-consumer-1   Up 56 seconds
+kafka-ui                        Up 57 seconds
+orders-api                      Up 57 seconds
+=== PASO 2: enviar 5 pedidos con inventory CAIDO (la API debe responder 202) ===
+Pedido 1 -> {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793308753403-909","correlationId":"f15ab417-86ad-4346-a329-5c3d9381336e"} HTTP 202 (0.094606s)
+Pedido 2 -> {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793308753482-856","correlationId":"95465ef8-c92d-4c89-8a43-778734da579b"} HTTP 202 (0.012919s)
+Pedido 3 -> {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793308753507-186","correlationId":"f8d30fcd-6932-4b66-9bb5-0ba58cf75d88"} HTTP 202 (0.009776s)
+Pedido 4 -> {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793308753527-209","correlationId":"b37be3e9-d9a2-43f8-9d90-d881ed5cb26d"} HTTP 202 (0.009144s)
+Pedido 5 -> {"status":"accepted","message":"Pedido recibido y evento OrderCreated publicado en Kafka","orderId":"ORD-1793308753548-241","correlationId":"80e824a2-af37-4b90-b556-5333cce2fa6c"} HTTP 202 (0.007026s)
+=== PASO 3: inventory acumula LAG; billing sigue activo (LAG 0) ===
+--- inventory-service-group (LAG > 0, sin miembros) ---
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          -               2               -               inventory-consumer-77d25dc7-a3c3-4f69-aefd-18cc6364447b /172.21.0.7     inventory-consumer
+inventory-service-group orders.events   1          -               3               -               inventory-consumer-77d25dc7-a3c3-4f69-aefd-18cc6364447b /172.21.0.7     inventory-consumer
+--- billing-service-group (sigue consumiendo) ---
+
+GROUP                 TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                           HOST            CLIENT-ID
+billing-service-group orders.events   0          -               2               -               billing-consumer-63428331-17de-40cb-a3d7-b7ffba4ca268 /172.21.0.5     billing-consumer
+billing-service-group orders.events   1          1               3               2               billing-consumer-63428331-17de-40cb-a3d7-b7ffba4ca268 /172.21.0.5     billing-consumer
+=== PASO 4: REINICIAR inventory-consumer (recuperacion) ===
+ Container kafka Waiting 
+ Container kafka Healthy 
+ Container kafka-inventory-consumer-1 Starting 
+ Container kafka-inventory-consumer-1 Started 
+=== PASO 5: lag de inventory tras recuperacion (debe ser LAG 0) ===
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          2               2               0               inventory-consumer-d30f89e7-e66d-42dd-a069-6aed6cf9a428 /172.21.0.7     inventory-consumer
+inventory-service-group orders.events   1          3               3               0               inventory-consumer-d30f89e7-e66d-42dd-a069-6aed6cf9a428 /172.21.0.7     inventory-consumer
+=== PASO 6: inventory consumió los 5 eventos CP09K desde el log ===
+inventory-consumer-1  | 2026-10-29T21:19:25.142Z [inventory-consumer 90f27676a633] Contenido: {"eventId":"70b6d9f0-231e-4db1-8f06-7d3b85c9ad43","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T21:19:13.404Z","source":"orders-api","correlationId":"f15ab417-86ad-4346-a329-5c3d9381336e","data":{"orderId":"ORD-1793308753403-909","customerName":"CP09K Cliente 1","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+inventory-consumer-1  | 2026-10-29T21:19:28.149Z [inventory-consumer 90f27676a633] Contenido: {"eventId":"57b0a370-a708-460d-9559-f15c60e9dd2f","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T21:19:13.507Z","source":"orders-api","correlationId":"f8d30fcd-6932-4b66-9bb5-0ba58cf75d88","data":{"orderId":"ORD-1793308753507-186","customerName":"CP09K Cliente 3","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+inventory-consumer-1  | 2026-10-29T21:19:31.156Z [inventory-consumer 90f27676a633] Contenido: {"eventId":"21fd834d-3c3b-4d37-a44c-af76079633a3","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T21:19:13.548Z","source":"orders-api","correlationId":"80e824a2-af37-4b90-b556-5333cce2fa6c","data":{"orderId":"ORD-1793308753548-241","customerName":"CP09K Cliente 5","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+inventory-consumer-1  | 2026-10-29T21:19:34.167Z [inventory-consumer 90f27676a633] Contenido: {"eventId":"cf27491c-9b9c-42ee-9eda-e71bfec8f569","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T21:19:13.482Z","source":"orders-api","correlationId":"95465ef8-c92d-4c89-8a43-778734da579b","data":{"orderId":"ORD-1793308753482-856","customerName":"CP09K Cliente 2","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+inventory-consumer-1  | 2026-10-29T21:19:37.172Z [inventory-consumer 90f27676a633] Contenido: {"eventId":"3d4f0217-add4-423c-be13-f3c2234a4b5f","eventType":"OrderCreated","eventVersion":"1.0","occurredAt":"2026-10-29T21:19:13.528Z","source":"orders-api","correlationId":"b37be3e9-d9a2-43f8-9d90-d881ed5cb26d","data":{"orderId":"ORD-1793308753527-209","customerName":"CP09K Cliente 4","product":"Libro de arquitectura","quantity":1,"unitPrice":85000,"total":85000}}
+--- total CP09K procesados por inventory (debe ser 5) ---
+5
+=== PASO 7: GROUP_JOIN tras reconexion (reasignacion de particiones) ===
+inventory-consumer-1  | 2026-10-29T21:19:25.108Z [inventory-consumer 90f27676a633] Unido al grupo "inventory-service-group". Particiones asignadas: {"orders.events":[0,1]}
+=== FIN CP-09 Kafka.  Log: evidencias/cp09-resilient-kafka-20261029-161910.log ===

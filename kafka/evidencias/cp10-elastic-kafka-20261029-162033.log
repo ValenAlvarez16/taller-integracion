@@ -1,0 +1,73 @@
+##########################################################################
+# CP-10 ELASTIC (Kafka) - Fecha: 29/10/2026 16:20:33
+##########################################################################
+=== PASO 1: ESCALAR inventory-consumer a 2 instancias (mismo grupo) ===
+ Container kafka-ui Running 
+ Container orders-api Running 
+ Container kafka-inventory-consumer-1 Running 
+ Container kafka-billing-consumer-1 Running 
+ Container kafka-notification-consumer-1 Running 
+ Container kafka Running 
+ Container kafka-inventory-consumer-2 Creating 
+ Container kafka-inventory-consumer-2 Created 
+ Container kafka Waiting 
+ Container kafka Waiting 
+ Container kafka Waiting 
+ Container kafka Waiting 
+ Container kafka Waiting 
+ Container kafka Healthy 
+ Container kafka-inventory-consumer-2 Starting 
+ Container kafka Healthy 
+ Container kafka Healthy 
+ Container kafka Healthy 
+ Container kafka Healthy 
+ Container kafka-inventory-consumer-2 Started 
+NAME                            IMAGE                           COMMAND                  SERVICE                 CREATED          STATUS                   PORTS
+kafka-inventory-consumer-1      kafka-inventory-consumer        "docker-entrypoint.s…"   inventory-consumer      2 minutes ago    Up About a minute        
+kafka-inventory-consumer-2      kafka-inventory-consumer        "docker-entrypoint.s…"   inventory-consumer      16 seconds ago   Up 15 seconds            
+=== PASO 2: reparto de PARTICIONES entre las 2 instancias (vista del broker) ===
+    Cada particion queda asignada a un CONSUMER-ID distinto -> Kafka reparte por particion.
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          2               2               0               inventory-consumer-d30f89e7-e66d-42dd-a069-6aed6cf9a428 /172.21.0.7     inventory-consumer
+inventory-service-group orders.events   1          3               3               0               inventory-consumer-50ddc80b-060e-4dc0-b232-14fd31fbdeac /172.21.0.8     inventory-consumer
+=== PASO 3: enviar 6 pedidos (key=orderId -> se distribuyen entre las 2 particiones) ===
+Pedido 1 -> HTTP 202
+Pedido 2 -> HTTP 202
+Pedido 3 -> HTTP 202
+Pedido 4 -> HTTP 202
+Pedido 5 -> HTTP 202
+Pedido 6 -> HTTP 202
+=== PASO 4: total de eventos CP10K consumidos por el grupo inventory (debe ser 6) ===
+6
+    El reparto por particion se evidencia en la vista del broker (PASO 2 y PASO 5):
+    cada particion tiene un CONSUMER-ID distinto y sus offsets avanzan de forma independiente.
+=== PASO 5: lag final del grupo y avance de offsets por particion (LAG 0) ===
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          5               5               0               inventory-consumer-d30f89e7-e66d-42dd-a069-6aed6cf9a428 /172.21.0.7     inventory-consumer
+inventory-service-group orders.events   1          6               6               0               inventory-consumer-50ddc80b-060e-4dc0-b232-14fd31fbdeac /172.21.0.8     inventory-consumer
+=== PASO 6: volver a 1 instancia (entorno limpio) ===
+ Container kafka Running 
+ Container kafka-ui Running 
+ Container orders-api Running 
+ Container kafka-inventory-consumer-1 Running 
+ Container kafka-billing-consumer-1 Running 
+ Container kafka-notification-consumer-1 Running 
+ Container kafka-inventory-consumer-2 Stopping 
+ Container kafka-inventory-consumer-2 Stopped 
+ Container kafka-inventory-consumer-2 Removing 
+ Container kafka-inventory-consumer-2 Removed 
+ Container kafka Waiting 
+ Container kafka Waiting 
+ Container kafka Waiting 
+ Container kafka Waiting 
+ Container kafka Waiting 
+ Container kafka Healthy 
+ Container kafka Healthy 
+ Container kafka Healthy 
+ Container kafka Healthy 
+ Container kafka Healthy 
+NAME                            IMAGE                           COMMAND                  SERVICE                 CREATED         STATUS                   PORTS
+kafka-inventory-consumer-1      kafka-inventory-consumer        "docker-entrypoint.s…"   inventory-consumer      3 minutes ago   Up About a minute        
+=== FIN CP-10 Kafka.  Log: evidencias/cp10-elastic-kafka-20261029-162033.log ===

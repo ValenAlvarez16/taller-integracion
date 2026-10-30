@@ -1,0 +1,38 @@
+##########################################################################
+# CP-11 DESACOPLAMIENTO TEMPORAL (RabbitMQ) - Fecha: 29/10/2026 16:08:20
+##########################################################################
+=== PASO 1: APAGAR el consumidor ===
+ Container rabbitmq-notification-worker-1 Stopping 
+ Container rabbitmq-notification-worker-1 Stopped 
+NAME         STATUS
+orders-api   Up 30 minutes
+rabbitmq     Up 30 minutes (healthy)
+=== PASO 2: publicar 3 pedidos. HORA DE PUBLICACION: 16:08:21 ===
+Pedido 1 -> {"status":"accepted","message":"Pedido recibido y enviado a RabbitMQ","orderId":"ORD-1793308101346-867","correlationId":"d396ec4f-253e-4a39-8cde-f9e1841968ec"}
+Pedido 2 -> {"status":"accepted","message":"Pedido recibido y enviado a RabbitMQ","orderId":"ORD-1793308101363-688","correlationId":"7a4cc34f-b2ef-4b48-8430-cfac8b5f93eb"}
+Pedido 3 -> {"status":"accepted","message":"Pedido recibido y enviado a RabbitMQ","orderId":"ORD-1793308101378-900","correlationId":"b3cc3356-18cc-406f-b2d5-8fba77d6ae53"}
+=== PASO 3: cola con consumidor apagado (READY=3) ===
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	messages_unacknowledged
+pedidos	3	3	0
+=== PASO 4: ESPERA DELIBERADA de 10s con los mensajes retenidos en la cola ===
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	messages_unacknowledged
+pedidos	3	3	0
+=== PASO 5: INICIAR el consumidor. HORA DE INICIO: 16:08:36 ===
+ Container rabbitmq Waiting 
+ Container rabbitmq Healthy 
+ Container rabbitmq-notification-worker-1 Starting 
+ Container rabbitmq-notification-worker-1 Started 
+=== PASO 6: cola final (debe quedar 0) ===
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	messages_unacknowledged
+pedidos	0	0	0
+=== PASO 7: comparar createdAt (publicacion) vs timestamp del log (procesamiento) ===
+notification-worker-1  | 2026-10-29T21:08:37.426Z [notification-worker c6f6cbe1f317] Contenido: {"type":"ProcessOrder","orderId":"ORD-1793308101346-867","correlationId":"d396ec4f-253e-4a39-8cde-f9e1841968ec","customerName":"CP11 Cliente 1","product":"Libro de arquitectura","quantity":1,"createdAt":"2026-10-29T21:08:21.346Z"}
+notification-worker-1  | 2026-10-29T21:08:40.433Z [notification-worker c6f6cbe1f317] Contenido: {"type":"ProcessOrder","orderId":"ORD-1793308101363-688","correlationId":"7a4cc34f-b2ef-4b48-8430-cfac8b5f93eb","customerName":"CP11 Cliente 2","product":"Libro de arquitectura","quantity":1,"createdAt":"2026-10-29T21:08:21.363Z"}
+notification-worker-1  | 2026-10-29T21:08:43.439Z [notification-worker c6f6cbe1f317] Contenido: {"type":"ProcessOrder","orderId":"ORD-1793308101378-900","correlationId":"b3cc3356-18cc-406f-b2d5-8fba77d6ae53","customerName":"CP11 Cliente 3","product":"Libro de arquitectura","quantity":1,"createdAt":"2026-10-29T21:08:21.378Z"}
+=== FIN CP-11 RabbitMQ.  Log: evidencias/cp11-desacople-rabbitmq-20261029-160820.log ===

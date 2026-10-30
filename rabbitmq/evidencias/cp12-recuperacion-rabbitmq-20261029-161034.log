@@ -1,0 +1,72 @@
+##########################################################################
+# CP-12 RECUPERACION / 0 PERDIDA (RabbitMQ) - Fecha: 29/10/2026 16:10:34
+##########################################################################
+=== 12.1 REINICIO DEL BROKER con mensajes persistentes retenidos ===
+--- Apagar worker para que los mensajes queden retenidos ---
+ Container rabbitmq-notification-worker-1 Stopping 
+ Container rabbitmq-notification-worker-1 Stopped 
+--- Publicar 4 pedidos (persistent=true, cola durable=true) ---
+Pedido 1 -> HTTP 202
+Pedido 2 -> HTTP 202
+Pedido 3 -> HTTP 202
+Pedido 4 -> HTTP 202
+--- Cola ANTES del reinicio del broker ---
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	durable
+pedidos	4	4	true
+--- REINICIAR el broker RabbitMQ ---
+ Container rabbitmq Restarting 
+ Container rabbitmq Started 
+NAME         STATUS
+orders-api   Up 32 minutes
+rabbitmq     Up 25 seconds (healthy)
+--- Cola DESPUES del reinicio (los mensajes persistentes deben seguir ahi) ---
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	durable
+pedidos	4	4	true
+--- Iniciar worker: procesa los 4 mensajes recuperados ---
+ Container rabbitmq Waiting 
+ Container rabbitmq Healthy 
+ Container rabbitmq-notification-worker-1 Starting 
+ Container rabbitmq-notification-worker-1 Started 
+--- Cola final (0 -> 0 perdida pese al reinicio del broker) ---
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	messages_unacknowledged
+pedidos	0	0	0
+
+=== 12.2 REENTREGA de mensaje UNACKED (worker muere a mitad de procesamiento) ===
+    Pedido publicado orderId=ORD-1793308285393-883
+    Estado: el mensaje deberia estar UNACKED (entregado pero sin confirmar):
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	messages_unacknowledged
+pedidos	1	0	1
+--- MATAR el worker (kill -9) antes de que confirme el ACK ---
+ Container rabbitmq-notification-worker-1 Killing 
+ Container rabbitmq-notification-worker-1 Killed 
+    Tras matar el worker, el mensaje UNACKED vuelve a READY (RabbitMQ lo reencola):
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	messages_unacknowledged
+pedidos	1	1	0
+--- Reiniciar worker: REENTREGA (redelivered=true) y procesa ---
+ Container rabbitmq Running 
+ Container rabbitmq Waiting 
+ Container rabbitmq Healthy 
+ Container rabbitmq-notification-worker-1 Starting 
+ Container rabbitmq-notification-worker-1 Started 
+    Cola final (0 -> el mensaje no se perdio, se reentrego):
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	messages_unacknowledged
+pedidos	0	0	0
+    Evidencia de reentrega (redelivered=true) del pedido ORD-1793308285393-883:
+notification-worker-1  | 2026-10-29T21:11:25.396Z [notification-worker c6f6cbe1f317] Mensaje recibido orderId=ORD-1793308285393-883 correlationId=632df1fd-79c7-497b-b208-f01d14d281e2 redelivered=false deliveryTag=5
+notification-worker-1  | 2026-10-29T21:11:25.396Z [notification-worker c6f6cbe1f317] Contenido: {"type":"ProcessOrder","orderId":"ORD-1793308285393-883","correlationId":"632df1fd-79c7-497b-b208-f01d14d281e2","customerName":"CP12 Unacked","product":"Libro de arquitectura","quantity":1,"createdAt":"2026-10-29T21:11:25.393Z"}
+notification-worker-1  | 2026-10-29T21:11:33.593Z [notification-worker c6f6cbe1f317] Mensaje recibido orderId=ORD-1793308285393-883 correlationId=632df1fd-79c7-497b-b208-f01d14d281e2 redelivered=true deliveryTag=1
+notification-worker-1  | 2026-10-29T21:11:33.593Z [notification-worker c6f6cbe1f317] Contenido: {"type":"ProcessOrder","orderId":"ORD-1793308285393-883","correlationId":"632df1fd-79c7-497b-b208-f01d14d281e2","customerName":"CP12 Unacked","product":"Libro de arquitectura","quantity":1,"createdAt":"2026-10-29T21:11:25.393Z"}
+notification-worker-1  | 2026-10-29T21:11:36.598Z [notification-worker c6f6cbe1f317] Notificación enviada. ACK orderId=ORD-1793308285393-883 correlationId=632df1fd-79c7-497b-b208-f01d14d281e2 totalProcesados=1
+=== FIN CP-12 RabbitMQ.  Log: evidencias/cp12-recuperacion-rabbitmq-20261029-161034.log ===

@@ -1,0 +1,53 @@
+##########################################################################
+# CP-12 RECUPERACION / 0 PERDIDA (Kafka) - Fecha: 29/10/2026 20:48:42
+##########################################################################
+=== 12.1 REINICIO DEL BROKER KAFKA con eventos en el log ===
+--- offsets y commits de los 3 grupos ANTES del reinicio ---
+orders.events:0:7
+orders.events:1:7
+GROUP                 TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                           HOST            CLIENT-ID
+billing-service-group orders.events   0          7               7               0               billing-consumer-a263191a-5ebb-4f28-8afe-c4107c50ed57 /172.21.0.5     billing-consumer
+billing-service-group orders.events   1          7               7               0               billing-consumer-a263191a-5ebb-4f28-8afe-c4107c50ed57 /172.21.0.5     billing-consumer
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          7               7               0               inventory-consumer-6f599bd0-88b0-411c-b4fc-026d32e18e9e /172.21.0.7     inventory-consumer
+inventory-service-group orders.events   1          7               7               0               inventory-consumer-6f599bd0-88b0-411c-b4fc-026d32e18e9e /172.21.0.7     inventory-consumer
+GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                HOST            CLIENT-ID
+notification-service-group orders.events   0          7               7               0               notification-consumer-a8319381-8cdc-419b-8102-00716249e5d4 /172.21.0.6     notification-consumer
+notification-service-group orders.events   1          7               7               0               notification-consumer-a8319381-8cdc-419b-8102-00716249e5d4 /172.21.0.6     notification-consumer
+--- REINICIAR el broker Kafka ---
+ Container kafka Restarting 
+ Container kafka Started 
+NAME                            IMAGE                           COMMAND                  SERVICE                 CREATED       STATUS                    PORTS
+kafka                           bitnamilegacy/kafka:3.7         "/opt/bitnami/script…"   kafka                   5 hours ago   Up 32 seconds (healthy)   9092/tcp, 0.0.0.0:29092->29092/tcp, [::]:29092->29092/tcp
+kafka-billing-consumer-1        kafka-billing-consumer          "docker-entrypoint.s…"   billing-consumer        5 hours ago   Up 5 hours                
+kafka-inventory-consumer-1      kafka-inventory-consumer        "docker-entrypoint.s…"   inventory-consumer      5 hours ago   Up 3 minutes              
+kafka-notification-consumer-1   kafka-notification-consumer     "docker-entrypoint.s…"   notification-consumer   5 hours ago   Up 5 hours                
+kafka-ui                        provectuslabs/kafka-ui:latest   "/bin/sh -c 'java --…"   kafka-ui                5 hours ago   Up 5 hours                0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+orders-api                      kafka-orders-api                "docker-entrypoint.s…"   orders-api              5 hours ago   Up 5 hours                0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+--- offsets DESPUES del reinicio (los eventos persisten en el volumen kafka_data) ---
+orders.events:0:7
+orders.events:1:7
+--- commits de los grupos DESPUES del reinicio (se conservan -> 0 perdida) ---
+GROUP                 TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                           HOST            CLIENT-ID
+billing-service-group orders.events   0          7               7               0               billing-consumer-fe4b3032-e0b6-43e1-888d-2d965b66bfe4 /172.21.0.5     billing-consumer
+billing-service-group orders.events   1          7               7               0               billing-consumer-fe4b3032-e0b6-43e1-888d-2d965b66bfe4 /172.21.0.5     billing-consumer
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                             HOST            CLIENT-ID
+inventory-service-group orders.events   0          7               7               0               inventory-consumer-37e946ad-3be2-4c3a-afed-2a57667dab4d /172.21.0.7     inventory-consumer
+inventory-service-group orders.events   1          7               7               0               inventory-consumer-37e946ad-3be2-4c3a-afed-2a57667dab4d /172.21.0.7     inventory-consumer
+GROUP                      TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                HOST            CLIENT-ID
+notification-service-group orders.events   0          7               7               0               notification-consumer-a8319381-8cdc-419b-8102-00716249e5d4 /172.21.0.6     notification-consumer
+notification-service-group orders.events   1          7               7               0               notification-consumer-a8319381-8cdc-419b-8102-00716249e5d4 /172.21.0.6     notification-consumer
+
+=== 12.2 CONSUMIDOR POSTERIOR (grupo nuevo lee TODO el historial del log) ===
+    Eventos historicos en orders.events = 14
+--- Crear consumer group NUEVO (qa-auditor-group-204927) que lee desde --from-beginning (timeout 19800ms) ---
+    Eventos leidos por qa-auditor-group-204927 = 14
+--- estado del nuevo grupo tras leer el historial (CURRENT-OFFSET = LOG-END-OFFSET, LAG 0) ---
+
+Consumer group 'qa-auditor-group-204927' has no active members.
+
+GROUP                   TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID     HOST            CLIENT-ID
+qa-auditor-group-204927 orders.events   0          7               7               0               -               -               -
+qa-auditor-group-204927 orders.events   1          7               7               0               -               -               -
+    RESULTADO: OK (CURRENT-OFFSET del grupo = 14 = 14 eventos del log) -> 0 perdida
+=== FIN CP-12 Kafka.  Log: evidencias/cp12-recuperacion-kafka-20261029-204842.log ===

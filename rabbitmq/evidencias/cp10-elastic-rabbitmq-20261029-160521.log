@@ -1,0 +1,70 @@
+##########################################################################
+# CP-10 ELASTIC (RabbitMQ) - Fecha: 29/10/2026 16:05:21
+##########################################################################
+=== PASO 1: ESCALAR notification-worker a 2 instancias ===
+ Container orders-api Running 
+ Container rabbitmq-notification-worker-1 Running 
+ Container rabbitmq Running 
+ Container rabbitmq-notification-worker-2 Creating 
+ Container rabbitmq-notification-worker-2 Created 
+ Container rabbitmq Waiting 
+ Container rabbitmq Waiting 
+ Container rabbitmq Healthy 
+ Container rabbitmq Healthy 
+ Container rabbitmq-notification-worker-2 Starting 
+ Container rabbitmq-notification-worker-2 Started 
+NAME                             IMAGE                          COMMAND                  SERVICE               CREATED          STATUS                    PORTS
+orders-api                       rabbitmq-orders-api            "docker-entrypoint.s…"   orders-api            27 minutes ago   Up 27 minutes             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+rabbitmq                         rabbitmq:4-management          "docker-entrypoint.s…"   rabbitmq              27 minutes ago   Up 27 minutes (healthy)   4369/tcp, 5671/tcp, 0.0.0.0:5672->5672/tcp, [::]:5672->5672/tcp, 15671/tcp, 15691-15692/tcp, 25672/tcp, 0.0.0.0:15672->15672/tcp, [::]:15672->15672/tcp
+rabbitmq-notification-worker-1   rabbitmq-notification-worker   "docker-entrypoint.s…"   notification-worker   27 minutes ago   Up 22 minutes             
+rabbitmq-notification-worker-2   rabbitmq-notification-worker   "docker-entrypoint.s…"   notification-worker   7 seconds ago    Up 6 seconds              
+=== PASO 2: identificar las 2 instancias (WORKER_ID = hostname) ===
+notification-worker-1  | 2026-10-29T20:43:28.053Z [notification-worker c6f6cbe1f317] Escuchando la cola "pedidos" (prefetch=1, ack manual, procesamiento=3000 ms)
+notification-worker-2  | 2026-10-29T21:05:22.956Z [notification-worker 5bf242303ade] Escuchando la cola "pedidos" (prefetch=1, ack manual, procesamiento=3000 ms)
+=== PASO 3: enviar 10 pedidos para repartir entre las 2 instancias ===
+Pedido 1 -> HTTP 202
+Pedido 2 -> HTTP 202
+Pedido 3 -> HTTP 202
+Pedido 4 -> HTTP 202
+Pedido 5 -> HTTP 202
+Pedido 6 -> HTTP 202
+Pedido 7 -> HTTP 202
+Pedido 8 -> HTTP 202
+Pedido 9 -> HTTP 202
+Pedido 10 -> HTTP 202
+=== PASO 4: esperar procesamiento (10 / 2 workers x 3s + margen) ===
+Timeout: 60.0 seconds ...
+Listing queues for vhost / ...
+name	messages	messages_ready	messages_unacknowledged
+pedidos	0	0	0
+=== PASO 5: REPARTO DE CARGA - pedidos CP10 procesados por cada instancia ===
+notification-worker-2  | 2026-10-29T21:05:29.047Z [notification-worker 5bf242303ade] Simulando envío de notificación a CP10 Cliente 2 por "Libro de arquitectura" x1...
+notification-worker-2  | 2026-10-29T21:05:32.053Z [notification-worker 5bf242303ade] Simulando envío de notificación a CP10 Cliente 4 por "Libro de arquitectura" x1...
+notification-worker-2  | 2026-10-29T21:05:35.059Z [notification-worker 5bf242303ade] Simulando envío de notificación a CP10 Cliente 6 por "Libro de arquitectura" x1...
+notification-worker-2  | 2026-10-29T21:05:38.063Z [notification-worker 5bf242303ade] Simulando envío de notificación a CP10 Cliente 8 por "Libro de arquitectura" x1...
+notification-worker-1  | 2026-10-29T21:05:29.028Z [notification-worker c6f6cbe1f317] Simulando envío de notificación a CP10 Cliente 1 por "Libro de arquitectura" x1...
+notification-worker-2  | 2026-10-29T21:05:41.068Z [notification-worker 5bf242303ade] Simulando envío de notificación a CP10 Cliente 10 por "Libro de arquitectura" x1...
+notification-worker-1  | 2026-10-29T21:05:32.035Z [notification-worker c6f6cbe1f317] Simulando envío de notificación a CP10 Cliente 3 por "Libro de arquitectura" x1...
+notification-worker-1  | 2026-10-29T21:05:35.041Z [notification-worker c6f6cbe1f317] Simulando envío de notificación a CP10 Cliente 5 por "Libro de arquitectura" x1...
+notification-worker-1  | 2026-10-29T21:05:38.047Z [notification-worker c6f6cbe1f317] Simulando envío de notificación a CP10 Cliente 7 por "Libro de arquitectura" x1...
+notification-worker-1  | 2026-10-29T21:05:41.053Z [notification-worker c6f6cbe1f317] Simulando envío de notificación a CP10 Cliente 9 por "Libro de arquitectura" x1...
+--- conteo por instancia (hostname) ---
+Instancia 5bf242303ade -> procesó 5 pedidos CP10
+Instancia c6f6cbe1f317 -> procesó 5 pedidos CP10
+=== PASO 6: volver a 1 instancia (entorno limpio) ===
+ Container orders-api Running 
+ Container rabbitmq-notification-worker-1 Running 
+ Container rabbitmq Running 
+ Container rabbitmq-notification-worker-2 Stopping 
+ Container rabbitmq-notification-worker-2 Stopped 
+ Container rabbitmq-notification-worker-2 Removing 
+ Container rabbitmq-notification-worker-2 Removed 
+ Container rabbitmq Waiting 
+ Container rabbitmq Waiting 
+ Container rabbitmq Healthy 
+ Container rabbitmq Healthy 
+NAME                             IMAGE                          COMMAND                  SERVICE               CREATED          STATUS                    PORTS
+orders-api                       rabbitmq-orders-api            "docker-entrypoint.s…"   orders-api            27 minutes ago   Up 27 minutes             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+rabbitmq                         rabbitmq:4-management          "docker-entrypoint.s…"   rabbitmq              27 minutes ago   Up 27 minutes (healthy)   4369/tcp, 5671/tcp, 0.0.0.0:5672->5672/tcp, [::]:5672->5672/tcp, 15671/tcp, 15691-15692/tcp, 25672/tcp, 0.0.0.0:15672->15672/tcp, [::]:15672->15672/tcp
+rabbitmq-notification-worker-1   rabbitmq-notification-worker   "docker-entrypoint.s…"   notification-worker   27 minutes ago   Up 22 minutes             
+=== FIN CP-10 RabbitMQ.  Log: evidencias/cp10-elastic-rabbitmq-20261029-160521.log ===
